@@ -1,5 +1,6 @@
 # default combatlog file
 WoWCombatLog.txt
+WoWCombatLog.txt.json
 
 # Code template for copy-paste
 tpl.py
