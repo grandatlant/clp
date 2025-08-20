@@ -141,10 +141,19 @@ def main(args: Optional[List[str]] = None) -> int:
     if df is not None:
         for group in df.groupby('event'):
             print(group)
+##            group[1].to_json(
+##                '(%s).%s.json' % (group[0], parsed.combatlog),
+##                orient='records',
+##                indent=4,
+##            )
     log.debug('%s.main(%s) finish. return 0', __name__, args)
     return 0
 
 
 if __name__ == '__main__':
     #assert sys.prefix != sys.base_prefix, 'Running outside venv!'
-    sys.exit(main(sys.argv))
+    if flag := getattr(sys, 'ps1', sys.flags.interactive):
+        print('(interactive: %s)' % flag)
+        print(dir())
+    else:
+        sys.exit(main(sys.argv))
