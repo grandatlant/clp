@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3
 # -*- coding: utf-8 -*-
 
 '''
@@ -148,7 +148,7 @@ Suffix Parser Set
 class DamageParser:        
     def __init__(self): pass
     def parse(self, cols):
-        cols = cols[8:]
+        #cols = cols[8:]
         return {
             'amount': int(cols[0]),
             'overkill': cols[1],
@@ -174,7 +174,7 @@ class MissParser:
 class HealParser:
     def __init__(self): pass
     def parse(self, cols):
-        cols = cols[8:]
+        #cols = cols[8:]
         return {
             'amount': int(cols[0]),
             'overhealing': int(cols[1]),
@@ -185,7 +185,7 @@ class HealParser:
 class EnergizeParser:
     def __init__(self): pass
     def parse(self, cols):
-        cols = cols[8:]
+        #cols = cols[8:]
         return {
             'amount': int(cols[0]),
             'powerType': resolv_power_type(cols[1]),
@@ -407,17 +407,19 @@ class Parser:
             obj.update(self.enc_event[event].parse(cols[1:]))
             return obj
 
-        if len(cols) < 8: raise Exception('invalid format, ' + repr(cols))
-        obj = {'timestamp': ts,
-               'event': event,
-               'sourceGUID':   cols[1],
-               'sourceName':   cols[2],
-               'sourceFlags':  parse_unit_flag(cols[3]),
-               'sourceFlags2': parse_unit_flag(cols[4]),
-               'destGUID':   cols[5],
-               'destName':   cols[6],
-               'destFlags':  parse_unit_flag(cols[7]),
-               'destFlags2': parse_unit_flag(cols[8])}
+        if len(cols) < 7: raise Exception('invalid format, ' + repr(cols))
+        obj = {
+            'timestamp': ts,
+            'event': event,
+            'sourceGUID':   cols[1],
+            'sourceName':   cols[2],
+            'sourceFlags':  parse_unit_flag(cols[3]),
+            #'sourceFlags2': parse_unit_flag(cols[4]),
+            'destGUID':   cols[4],
+            'destName':   cols[5],
+            'destFlags':  parse_unit_flag(cols[6]),
+            #'destFlags2': parse_unit_flag(cols[8]),
+        }
 
         suffix = ''
         prefix_psr = None
@@ -441,7 +443,7 @@ class Parser:
         if prefix_psr is None or suffix_psr is None:
             raise Exception('Unknown event format, ' + repr(cols))
 
-        (res, remain) = prefix_psr.parse(cols[9:])
+        (res, remain) = prefix_psr.parse(cols[7:])
         obj.update(res)
         suffix_psr.raw = cols
         obj.update(suffix_psr.parse(remain))
@@ -453,8 +455,9 @@ class Parser:
         return obj
 
     def read_file(self, fname):
-        for line in open(fname, 'r'):
-            yield self.parse_line(line)
+        with open(fname, 'r') as fl:
+            for line in fl:
+                yield self.parse_line(line)
             
 
 
@@ -463,7 +466,5 @@ if __name__ == '__main__':
     p = Parser()
     for arg in sys.argv[1:]:
         for a in p.read_file(arg):
-            print(a)
-
-
-
+            if a:
+                print(a)
