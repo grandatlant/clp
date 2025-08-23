@@ -8,7 +8,7 @@ https://wowpedia.fandom.com/wiki/COMBAT_LOG_EVENT
 
 __copyright__ = 'Copyright (C) 2025 grandatlant'
 
-__version__ = '0.0.2'
+__version__ = '0.0.3'
 
 __all__ = [
     'log',
@@ -20,6 +20,7 @@ __all__ = [
     'UnitFlag',
     'UnitInfo',
     'CombatLogEvent',
+    'EventParser',
 ]
 
 import os
@@ -28,9 +29,12 @@ import datetime
 import enum
 import logging
 
+from itertools import chain
 from dataclasses import dataclass, field, InitVar, asdict
 from argparse import ArgumentParser, Namespace
+
 from typing import (
+    ClassVar, Callable,
     Any, Optional, Final, Union,
     List, Dict, ItemsView, Container,
 )
@@ -47,32 +51,6 @@ log.setLevel(logging.DEBUG if __debug__ else env.LOG_LEVEL)
 
 # Helper classes
 
-class _AttrHolder:
-    """Attribute holder base class with human-readable repr."""
-    __slots__ = '__dict__',
-    def _get_args_(self) -> List[Any]:
-        return []
-    def _get_kwargs_(self) -> List[ItemsView[str, Any]]:
-        return sorted(self.__dict__.items())
-    def __repr__(self):
-        type_name = type(self).__name__
-        arg_strings, star_args = [], {}
-        for arg in self._get_args_():
-            arg_strings.append(repr(arg))
-        for name, value in self._get_kwargs_():
-            if name.isidentifier():
-                arg_strings.append('%s=%r' % (name, value))
-            else:
-                star_args[name] = value
-        if star_args:
-            arg_strings.append('**%s' % repr(star_args))
-        return '%s(%s)' % (type_name, ', '.join(arg_strings))
-
-
-class StrEnumParser(str, enum.Enum):
-    """StrEnum base class for parsing purpose."""
-
-
 class IntEnumParser(int, enum.Enum):
     """IntEnum base class for parsing purpose.
     Contains shared methods for int enum parsing.
@@ -80,7 +58,7 @@ class IntEnumParser(int, enum.Enum):
     @classmethod
     def from_literal(
         cls,
-        literal: Union[str, bytes, bytearray],
+        literal: Union[str, bytes, bytearray] = '-1',
         base: int = 0,
     ) -> object:
         """Create enum member from int literal (usually hex)."""
@@ -94,7 +72,7 @@ class IntFlagParser(enum.IntFlag):
     @classmethod
     def from_literal(
         cls,
-        literal: Union[str, bytes, bytearray],
+        literal: Union[str, bytes, bytearray] = '0',
         base: int = 0,
     ) -> object:
         """Create flag member from int literal (usually hex)."""
@@ -177,61 +155,6 @@ class SchoolFlag(IntFlagParser):
     # not today tho...
 
 
-class EventPrefix(StrEnumParser):
-    SWING = 'SWING'
-    RANGE = 'RANGE'
-    SPELL = 'SPELL'
-    SPELL_PERIODIC = 'SPELL_PERIODIC'
-    SPELL_BUILDING = 'SPELL_BUILDING'
-    ENVIRONMENTAL = 'ENVIRONMENTAL'
-
-
-class EventSuffix(StrEnumParser):
-    _DAMAGE = '_DAMAGE'
-    _MISSED = '_MISSED'
-    _HEAL = '_HEAL'
-    _HEAL_ABSORBED = '_HEAL_ABSORBED'
-    _ABSORBED = '_ABSORBED'
-    _ENERGIZE = '_ENERGIZE'
-    _DRAIN = '_DRAIN'
-    _LEECH = '_LEECH'
-    _INTERRUPT = '_INTERRUPT'
-    _DISPEL = '_DISPEL'
-    _DISPEL_FAILED = '_DISPEL_FAILED'
-    _STOLEN = '_STOLEN'
-    _EXTRA_ATTACKS = '_EXTRA_ATTACKS'
-    _AURA_APPLIED = '_AURA_APPLIED'
-    _AURA_REMOVED = '_AURA_REMOVED'
-    _AURA_APPLIED_DOSE = '_AURA_APPLIED_DOSE'
-    _AURA_REMOVED_DOSE = '_AURA_REMOVED_DOSE'
-    _AURA_REFRESH = '_AURA_REFRESH'
-    _AURA_BROKEN = '_AURA_BROKEN'
-    _AURA_BROKEN_SPELL = '_AURA_BROKEN_SPELL'
-    _CAST_START = '_CAST_START'
-    _CAST_SUCCESS = '_CAST_SUCCESS'
-    _CAST_FAILED = '_CAST_FAILED'
-    _INSTAKILL = '_INSTAKILL'
-    _DURABILITY_DAMAGE = '_DURABILITY_DAMAGE'
-    _DURABILITY_DAMAGE_ALL = '_DURABILITY_DAMAGE_ALL'
-    _CREATE = '_CREATE'
-    _SUMMON = '_SUMMON'
-    _RESURRECT = '_RESURRECT'
-
-
-class SpecialEvent(StrEnumParser):
-    # Combined Events
-    DAMAGE_SPLIT = 'DAMAGE_SPLIT'#: (SpellParser(), DamageParser()),
-    DAMAGE_SHIELD = 'DAMAGE_SHIELD'#: (SpellParser(), DamageParser()),
-    DAMAGE_SHIELD_MISSED = 'DAMAGE_SHIELD_MISSED'#: (SpellParser(), MissParser()),
-    # Special Parameters
-    ENCHANT_APPLIED = 'ENCHANT_APPLIED'#: (EnchantParser(), VoidSuffixParser()),
-    ENCHANT_REMOVED = 'ENCHANT_REMOVED'#: (EnchantParser(), VoidSuffixParser()),
-    PARTY_KILL = 'PARTY_KILL'#: (VoidParser(), VoidSuffixParser()),
-    UNIT_DIED = 'UNIT_DIED'#: (VoidParser(), VoidSuffixParser()),
-    UNIT_DESTROYED = 'UNIT_DESTROYED'#: (VoidParser(), VoidSuffixParser()),
-    UNIT_DISSIPATES = 'UNIT_DISSIPATES'
-
-
 # Main external interface
 
 class UnitGuid(str):
@@ -240,8 +163,8 @@ class UnitGuid(str):
         val = int(0)
         try:
             val = int(self, base=0)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            log.warning('UnitGuid.__int__(%s) failed with %r.', self, exc)
         return val
     
     def to_int(self) -> int: return self.__int__()
@@ -250,12 +173,11 @@ class UnitGuid(str):
 @dataclass
 class UnitInfo():
     """Describes Unit info in a single Combat Log record."""
-    guid_str: InitVar[str]
-    name: str
+    guid_str: InitVar[str] = ''
+    guid: UnitGuid = field(init=False, default_factory=UnitGuid)
+    name: str = ''
     flags_str: InitVar[str] = '0'
-    
-    guid: UnitGuid = field(init=False)
-    flags: UnitFlag = field(init=False)
+    flags: UnitFlag = field(init=False, default_factory=UnitFlag.from_literal)
     
     def __post_init__(
         self,
@@ -264,7 +186,7 @@ class UnitInfo():
     ) -> None:
         self.guid = UnitGuid(guid_str)
         self.flags = UnitFlag.from_literal(flags_str)
-    
+        
     def dict(self) -> Dict[str, Any]: return asdict(self)
 
 
@@ -273,8 +195,8 @@ class CombatLogEvent():
     """Describes single Combat Log record."""
     timestamp: float
     name: str
-    source: UnitInfo
-    dest: UnitInfo
+    source: UnitInfo = field(default_factory=UnitInfo)
+    dest: UnitInfo = field(default_factory=UnitInfo)
     params: List[str] = field(default_factory=list)
     
     @classmethod
@@ -317,12 +239,240 @@ class CombatLogEvent():
     def dict(self) -> Dict[str, Any]: return asdict(self)
 
 
+def is_not_nil(arg: str):
+    return (arg != 'nil')
+
+
+@dataclass
+class EventParser():
+    """Class for parsing CombatLogEvent for analyse."""
+    event: Union[CombatLogEvent, str]
+    params: List[str] = field(default_factory=list)
+    
+    def __post_init__(self):
+        if isinstance(self.event, CombatLogEvent):
+            self.params = self.event.params.copy()
+            
+    # Prefix parsers
+    @staticmethod
+    def SpellParser():
+        return {
+            'spellId': str,
+            'spellName': str,
+            'spellSchool': SchoolFlag.from_literal,
+        }
+    @staticmethod
+    def EnvParser():
+        return {
+            'environmentalType': str,
+        }
+    
+    # Suffix parsers
+    @staticmethod
+    def DamageParser():
+        return {
+            'amount': int,
+            'overkill': int,
+            'school': SchoolFlag.from_literal,
+            'resisted': int,
+            'blocked': int,
+            'absorbed': int,
+            'critical': is_not_nil,
+            'glancing': is_not_nil,
+            'crushing': is_not_nil,
+            'isOffHand': is_not_nil,
+        }
+    @staticmethod
+    def MissParser():
+        return {
+            'missType': str,
+            'isOffHand': str,
+            'amountMissed': int,
+        }
+    @staticmethod
+    def HealParser():
+        return {
+            'amount': int,
+            'overhealing': int,
+            'absorbed': int,
+            'critical': is_not_nil,
+        }
+    @staticmethod
+    def EnergizeParser():
+        return {
+            'amount': int,
+            'powerType': PowerType.from_literal,
+        }
+    @staticmethod
+    def DrainParser():
+        return {
+            'amount': int,
+            'powerType': PowerType.from_literal,
+            'extraAmount': int,
+        }
+    @staticmethod
+    def SpellBlockParser():
+        return {
+            'extraSpellID': str,
+            'extraSpellName': str,
+            'extraSchool': SchoolFlag.from_literal,
+            'auraType': str,
+        }
+    @staticmethod
+    def ExtraAttackParser():
+        return {
+            'amount': int,
+        }
+    @staticmethod
+    def AuraParser():
+        return {
+            'auraType': str,
+            'amount': int,
+            'auraExtra1': str,# Not sure this column 
+            'auraExtra2': str,# Not sure this column 
+        }
+    @staticmethod
+    def AuraDoseParser():
+        return {
+            'auraType': str,
+            'powerType': PowerType.from_literal,
+        }
+    @staticmethod
+    def AuraBrokenParser():
+        return {
+            'extraSpellID': str,
+            'extraSpellName': str,
+            'extraSchool': SchoolFlag.from_literal,
+            'auraType': str,
+        }
+    @staticmethod
+    def CastFailedParser():
+        return {
+            'failedType': str,
+        }
+    
+    # Special parsers
+    @staticmethod
+    def EnchantParser():
+        return {
+            'spellName': str,
+            'itemID': str,
+            'itemName': str,
+        }
+    
+    # Combo-parsers
+    @property
+    def ev_prefix(self):
+        return {
+            'SWING': {},
+            'RANGE': self.SpellParser(),
+            'SPELL': self.SpellParser(),
+            'SPELL_PERIODIC': self.SpellParser(),
+            'SPELL_BUILDING': self.SpellParser(),
+            'ENVIRONMENTAL': self.EnvParser(),
+        }
+    @property
+    def ev_suffix(self):
+        return {
+            '_DAMAGE': self.DamageParser(),
+            '_MISSED': self.MissParser(),
+            '_HEAL': self.HealParser(),
+            '_HEAL_ABSORBED': {},
+            '_ABSORBED': {},
+            '_ENERGIZE': self.EnergizeParser(),
+            '_DRAIN': self.DrainParser(),
+            '_LEECH': self.DrainParser(),
+            '_INTERRUPT': self.SpellBlockParser(),
+            '_DISPEL': self.SpellBlockParser(),
+            '_DISPEL_FAILED': self.SpellBlockParser(),
+            '_STOLEN': self.SpellBlockParser(),
+            '_EXTRA_ATTACKS': self.ExtraAttackParser(),
+            '_AURA_APPLIED': self.AuraParser(),
+            '_AURA_REMOVED': self.AuraParser(),
+            '_AURA_APPLIED_DOSE': self.AuraDoseParser(),
+            '_AURA_REMOVED_DOSE': self.AuraDoseParser(),
+            '_AURA_REFRESH': self.AuraDoseParser(),
+            '_AURA_BROKEN': self.AuraParser(),
+            '_AURA_BROKEN_SPELL': self.AuraBrokenParser(),
+            '_CAST_START': {},
+            '_CAST_SUCCESS': {},
+            '_CAST_FAILED': self.CastFailedParser(),
+            '_INSTAKILL': {},
+            '_DURABILITY_DAMAGE': {},
+            '_DURABILITY_DAMAGE_ALL': {},
+            '_CREATE': {},
+            '_SUMMON': {},
+            '_RESURRECT': {},
+        }
+    @property
+    def sp_event(self):
+        return {
+            'DAMAGE_SPLIT': (self.SpellParser(), self.DamageParser()),
+            'DAMAGE_SHIELD': (self.SpellParser(), self.DamageParser()),
+            'DAMAGE_SHIELD_MISSED': (self.SpellParser(), self.MissParser()),
+            'ENCHANT_APPLIED': (self.EnchantParser(), {}),
+            'ENCHANT_REMOVED': (self.EnchantParser(), {}),
+            'PARTY_KILL': ({}, {}),
+            'UNIT_DIED': ({}, {}),
+            'UNIT_DESTROYED': ({}, {}),
+            'UNIT_DISSIPATES': ({}, {}),
+        }
+    
+    def parse_params(self) -> dict:
+        d = dict()
+        if isinstance(self.event, CombatLogEvent):
+            event = self.event.name
+            d.update(self.event.dict())
+        else:
+            event = str(self.event)
+        # Search for longest prefix
+        prefix_fields, suffix_fields = {}, {}
+        prefix_match = []
+        for k in self.ev_prefix.keys():
+            if event.startswith(k):
+                prefix_match.append(k)
+        if prefix_match:
+            prefix = max(prefix_match, key=len)
+            prefix_fields = self.ev_prefix.get(prefix)
+            suffix = event[len(prefix):]
+            suffix_fields = self.ev_suffix.get(suffix, {})
+        else:
+            # No prefix found. Search special events
+            for (k, psrs) in self.sp_event.items():
+                if event == k:
+                    (prefix_fields, suffix_fields) = psrs
+                    break
+        # Start popping params one by one in order saved in fields
+        for name, psr in chain(prefix_fields.items(), suffix_fields.items()):
+            if name in d:
+                raise KeyError(f'Duplicate parse attempt for field {name}.')
+            d[name] = psr(self.pop_param())
+        # Check if some params left
+        d['params'] = self.params
+        if self.params:
+            log.warning(
+                'EventParser.parse_params(%s) left params %s unparsed.',
+                self,
+                self.params,
+            )
+        return d
+
+    def pop_param(self):
+        val = ''
+        try:
+            val = self.params.pop(0)
+        except IndexError as exc:
+            log.warning('EventParser.pop_param(%s) failed with %r.', self, exc)
+        return val
+
+
 # Helper functions
 
 def parse_combat_log_line(
     line: str,
 ) -> Dict[str, Any]:
-    return CombatLogEvent.from_log_line(line).dict()
+    #return CombatLogEvent.from_log_line(line).dict()
+    return EventParser(CombatLogEvent.from_log_line(line)).parse_params()
 
 
 def parse_combat_log(
