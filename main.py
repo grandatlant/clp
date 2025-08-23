@@ -20,7 +20,7 @@ __all__ = [
     'UnitFlag',
     'UnitInfo',
     'CombatLogEvent',
-    'EventParser',
+    'EventParamsParser',
 ]
 
 import os
@@ -34,9 +34,10 @@ from dataclasses import dataclass, field, InitVar, asdict
 from argparse import ArgumentParser, Namespace
 
 from typing import (
-    ClassVar, Callable,
-    Any, Optional, Final, Union,
-    List, Dict, ItemsView, Container,
+    Final, ClassVar, Callable,
+    Any, Optional, Union,
+    Tuple, List, Dict,
+    ItemsView, Container,
 )
 
 #import numpy as np
@@ -195,10 +196,35 @@ class CombatLogEvent():
     """Describes single Combat Log record."""
     timestamp: float
     name: str
-    source: UnitInfo = field(default_factory=UnitInfo)
-    dest: UnitInfo = field(default_factory=UnitInfo)
-    params: List[str] = field(default_factory=list)
     
+    #source: UnitInfo = field(default_factory=UnitInfo)
+    sourceID_str: InitVar[str] = ''
+    sourceID: UnitGuid = field(init=False)
+    sourceName: str = ''
+    sourceFlags_str: InitVar[str] = '0'
+    sourceFlags: UnitFlag = field(init=False)
+    
+    #dest: UnitInfo = field(default_factory=UnitInfo)
+    destID_str: InitVar[str] = ''
+    destID: UnitGuid = field(init=False)
+    destName: str = ''
+    destFlags_str: InitVar[str] = '0'
+    destFlags: UnitFlag = field(init=False)
+    
+    params: List[str] = field(default_factory=list)
+
+    def __post_init__(
+        self,
+        sourceID_str,
+        sourceFlags_str,
+        destID_str,
+        destFlags_str,
+    ) -> None:
+        self.sourceID = UnitGuid(sourceID_str)
+        self.sourceFlags = UnitFlag.from_literal(sourceFlags_str)
+        self.destID = UnitGuid(destID_str)
+        self.destFlags = UnitFlag.from_literal(destFlags_str)
+        
     @classmethod
     def from_log_line(cls, line: str) -> object:
         """Constructor for WoWCombatLog.txt parsing line by line."""
@@ -231,20 +257,23 @@ class CombatLogEvent():
         return cls(
             timestamp,
             event_name,
-            UnitInfo(*event_source),
-            UnitInfo(*event_dest),
+            #UnitInfo(*event_source),
+            *event_source,
+            #UnitInfo(*event_dest),
+            *event_dest,
             event_params,
         )
     
     def dict(self) -> Dict[str, Any]: return asdict(self)
 
 
-def is_not_nil(arg: str):
-    return (arg != 'nil')
-
+# Type hints for EventParamsParser methods
+FieldsDict = Dict[str, Callable[[str], Any]]
+ParserDict = Dict[str, FieldsDict]
+TwinParserDict = Dict[str, Tuple[ParserDict, ParserDict]]
 
 @dataclass
-class EventParser():
+class EventParamsParser():
     """Class for parsing CombatLogEvent for analyse."""
     event: Union[CombatLogEvent, str]
     params: List[str] = field(default_factory=list)
@@ -252,24 +281,29 @@ class EventParser():
     def __post_init__(self):
         if isinstance(self.event, CombatLogEvent):
             self.params = self.event.params.copy()
-            
+
+    # Helper casters
+    @staticmethod
+    def is_not_nil(arg: str) -> bool:
+        return (arg != 'nil')
+    
     # Prefix parsers
     @staticmethod
-    def SpellParser():
+    def SpellParser() -> FieldsDict:
         return {
-            'spellId': str,
+            'spellId': int,
             'spellName': str,
             'spellSchool': SchoolFlag.from_literal,
         }
     @staticmethod
-    def EnvParser():
+    def EnvParser() -> FieldsDict:
         return {
             'environmentalType': str,
         }
     
     # Suffix parsers
     @staticmethod
-    def DamageParser():
+    def DamageParser() -> FieldsDict:
         return {
             'amount': int,
             'overkill': int,
@@ -277,41 +311,41 @@ class EventParser():
             'resisted': int,
             'blocked': int,
             'absorbed': int,
-            'critical': is_not_nil,
-            'glancing': is_not_nil,
-            'crushing': is_not_nil,
-            'isOffHand': is_not_nil,
+            'critical': EventParamsParser.is_not_nil,
+            'glancing': EventParamsParser.is_not_nil,
+            'crushing': EventParamsParser.is_not_nil,
+            #'isOffHand': EventParamsParser.is_not_nil,
         }
     @staticmethod
-    def MissParser():
+    def MissParser() -> FieldsDict:
         return {
             'missType': str,
-            'isOffHand': str,
-            'amountMissed': int,
+            #'isOffHand': str,
+            #'amountMissed': int,
         }
     @staticmethod
-    def HealParser():
+    def HealParser() -> FieldsDict:
         return {
             'amount': int,
             'overhealing': int,
             'absorbed': int,
-            'critical': is_not_nil,
+            'critical': EventParamsParser.is_not_nil,
         }
     @staticmethod
-    def EnergizeParser():
+    def EnergizeParser() -> FieldsDict:
         return {
             'amount': int,
             'powerType': PowerType.from_literal,
         }
     @staticmethod
-    def DrainParser():
+    def DrainParser() -> FieldsDict:
         return {
             'amount': int,
             'powerType': PowerType.from_literal,
             'extraAmount': int,
         }
     @staticmethod
-    def SpellBlockParser():
+    def SpellBlockParser() -> FieldsDict:
         return {
             'extraSpellID': str,
             'extraSpellName': str,
@@ -319,26 +353,24 @@ class EventParser():
             'auraType': str,
         }
     @staticmethod
-    def ExtraAttackParser():
+    def ExtraAttackParser() -> FieldsDict:
         return {
             'amount': int,
         }
     @staticmethod
-    def AuraParser():
+    def AuraParser() -> FieldsDict:
+        return {
+            'auraType': str,
+            #'amount': int,
+        }
+    @staticmethod
+    def AuraDoseParser() -> FieldsDict:
         return {
             'auraType': str,
             'amount': int,
-            'auraExtra1': str,# Not sure this column 
-            'auraExtra2': str,# Not sure this column 
         }
     @staticmethod
-    def AuraDoseParser():
-        return {
-            'auraType': str,
-            'powerType': PowerType.from_literal,
-        }
-    @staticmethod
-    def AuraBrokenParser():
+    def AuraBrokenParser() -> FieldsDict:
         return {
             'extraSpellID': str,
             'extraSpellName': str,
@@ -346,23 +378,23 @@ class EventParser():
             'auraType': str,
         }
     @staticmethod
-    def CastFailedParser():
+    def CastFailedParser() -> FieldsDict:
         return {
             'failedType': str,
         }
     
     # Special parsers
     @staticmethod
-    def EnchantParser():
+    def EnchantParser() -> FieldsDict:
         return {
             'spellName': str,
-            'itemID': str,
+            'itemID': int,
             'itemName': str,
         }
     
     # Combo-parsers
     @property
-    def ev_prefix(self):
+    def ev_prefix(self) -> ParserDict:
         return {
             'SWING': {},
             'RANGE': self.SpellParser(),
@@ -372,7 +404,7 @@ class EventParser():
             'ENVIRONMENTAL': self.EnvParser(),
         }
     @property
-    def ev_suffix(self):
+    def ev_suffix(self) -> ParserDict:
         return {
             '_DAMAGE': self.DamageParser(),
             '_MISSED': self.MissParser(),
@@ -391,7 +423,7 @@ class EventParser():
             '_AURA_REMOVED': self.AuraParser(),
             '_AURA_APPLIED_DOSE': self.AuraDoseParser(),
             '_AURA_REMOVED_DOSE': self.AuraDoseParser(),
-            '_AURA_REFRESH': self.AuraDoseParser(),
+            '_AURA_REFRESH': self.AuraParser(),
             '_AURA_BROKEN': self.AuraParser(),
             '_AURA_BROKEN_SPELL': self.AuraBrokenParser(),
             '_CAST_START': {},
@@ -405,7 +437,7 @@ class EventParser():
             '_RESURRECT': {},
         }
     @property
-    def sp_event(self):
+    def sp_event(self) -> TwinParserDict:
         return {
             'DAMAGE_SPLIT': (self.SpellParser(), self.DamageParser()),
             'DAMAGE_SHIELD': (self.SpellParser(), self.DamageParser()),
@@ -418,7 +450,7 @@ class EventParser():
             'UNIT_DISSIPATES': ({}, {}),
         }
     
-    def parse_params(self) -> dict:
+    def parse_params(self) -> Dict[str, Any]:
         d = dict()
         if isinstance(self.event, CombatLogEvent):
             event = self.event.name
@@ -426,43 +458,48 @@ class EventParser():
         else:
             event = str(self.event)
         # Search for longest prefix
-        prefix_fields, suffix_fields = {}, {}
+        prefix_fields, suffix_fields = None, None
         prefix_match = []
         for k in self.ev_prefix.keys():
             if event.startswith(k):
                 prefix_match.append(k)
         if prefix_match:
             prefix = max(prefix_match, key=len)
-            prefix_fields = self.ev_prefix.get(prefix)
+            prefix_fields = self.ev_prefix.get(prefix, None)
             suffix = event[len(prefix):]
-            suffix_fields = self.ev_suffix.get(suffix, {})
+            suffix_fields = self.ev_suffix.get(suffix, None)
         else:
             # No prefix found. Search special events
             for (k, psrs) in self.sp_event.items():
                 if event == k:
                     (prefix_fields, suffix_fields) = psrs
                     break
+        if prefix_fields is None or suffix_fields is None:
+            raise KeyError(f'Parser absent for unknown event {event}.')
         # Start popping params one by one in order saved in fields
-        for name, psr in chain(prefix_fields.items(), suffix_fields.items()):
+        for name, caster in chain(prefix_fields.items(), suffix_fields.items()):
             if name in d:
                 raise KeyError(f'Duplicate parse attempt for field {name}.')
-            d[name] = psr(self.pop_param())
+            d[name] = caster(self.pop_param())
         # Check if some params left
-        d['params'] = self.params
         if self.params:
+            d['params'] = self.params
             log.warning(
-                'EventParser.parse_params(%s) left params %s unparsed.',
+                'EventParamsParser.parse_params(%s) left params %s unparsed.',
                 self,
                 self.params,
             )
+        else:
+            # All params parsed, remove it if exists
+            d.pop('params', None)
         return d
 
     def pop_param(self):
-        val = ''
+        val = '0'
         try:
             val = self.params.pop(0)
         except IndexError as exc:
-            log.warning('EventParser.pop_param(%s) failed with %r.', self, exc)
+            log.warning('EventParamsParser.pop_param(%s) failed with %r.', self, exc)
         return val
 
 
@@ -471,8 +508,7 @@ class EventParser():
 def parse_combat_log_line(
     line: str,
 ) -> Dict[str, Any]:
-    #return CombatLogEvent.from_log_line(line).dict()
-    return EventParser(CombatLogEvent.from_log_line(line)).parse_params()
+    return EventParamsParser(CombatLogEvent.from_log_line(line)).parse_params()
 
 
 def parse_combat_log(
