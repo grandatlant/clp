@@ -11,16 +11,17 @@ __copyright__ = 'Copyright (C) 2025 grandatlant'
 __version__ = '0.0.3'
 
 __all__ = [
-    'log',
-    'main',
-    'parse_cli_args',
-    'parse_combat_log',
-    'parse_combat_log_line',
-    'UnitGuid',
-    'UnitFlag',
-    'UnitInfo',
-    'CombatLogEvent',
-    'EventParamsParser',
+    # Shared objects
+    'log', 'env', 'np', 'pd',
+    # Functions
+    'main', 'parse_cli_args', 'parse_combat_log', 'parse_combat_log_line',
+    # Helper classes
+    # enums
+    'PowerType', 'SchoolFlag', 'UnitFlag',
+    # data containers
+    'UnitGuid', 'UnitInfo',
+    # Parsing classes
+    'CombatLogEvent', 'EventParamsParser',
 ]
 
 import os
@@ -40,9 +41,8 @@ from typing import (
     ItemsView, Container,
 )
 
-#import numpy as np
+import numpy as np
 import pandas as pd
-#from matplotlib import pyplot as plt
 
 from envsetup import env
 
@@ -59,6 +59,7 @@ class IntEnumParser(int, enum.Enum):
     @classmethod
     def from_literal(
         cls,
+        # defaults '-1' as we think '0' is valid enum member for indexing
         literal: Union[str, bytes, bytearray] = '-1',
         base: int = 0,
     ) -> object:
@@ -168,7 +169,8 @@ class UnitGuid(str):
             log.warning('UnitGuid.__int__(%s) failed with %r.', self, exc)
         return val
     
-    def to_int(self) -> int: return self.__int__()
+    def to_int(self) -> int:
+        return self.__int__()
 
 
 @dataclass
@@ -188,7 +190,8 @@ class UnitInfo():
         self.guid = UnitGuid(guid_str)
         self.flags = UnitFlag.from_literal(flags_str)
         
-    def dict(self) -> Dict[str, Any]: return asdict(self)
+    def dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass
@@ -264,7 +267,8 @@ class CombatLogEvent():
             event_params,
         )
     
-    def dict(self) -> Dict[str, Any]: return asdict(self)
+    def dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 
 # Type hints for EventParamsParser methods
@@ -592,6 +596,8 @@ if __name__ == '__main__':
     #assert sys.prefix != sys.base_prefix, 'Running outside venv!'
     if flag := getattr(sys, 'ps1', sys.flags.interactive):
         print('(interactive: %s)' % flag)
-        print(dir())
+        from pprint import pprint as pp
+        cldf = pd.DataFrame(parse_combat_log('WoWCombatLog.txt'))
+        pp(dir(), compact=True, indent=4)
     else:
         sys.exit(main(sys.argv))
