@@ -84,6 +84,11 @@ class ParsingError(Exception):
 class StrEnumParser(str, enum.Enum):
     """StrEnum base class for parsing purpose.
     Contains shared methods for str enum parsing."""
+    @classmethod
+    def _missing_(cls, val: Union[str, Any]) -> str:
+        """A classmethod for looking up values not found in cls."""
+        log.warning('StrEnumParser %r missing value %s.', cls, val)
+        return str(val)
 
 
 class IntEnumParser(int, enum.Enum):
@@ -119,7 +124,12 @@ class IntFlagParser(enum.IntFlag):
 
 class EnvironmentalType(StrEnumParser):
     """Environmental Type parsing enum."""
-    #TODO: Need some members here
+    DROWNING = 'Drowning'
+    FALLING = 'Falling'
+    FATIGUE = 'Fatigue'
+    FIRE = 'Fire'
+    LAVA = 'Lava'
+    SLIME = 'Slime'
 
 
 class MissType(StrEnumParser):
@@ -128,6 +138,12 @@ class MissType(StrEnumParser):
     DODGE = 'DODGE'
     PARRY = 'PARRY'
     IMMUNE = 'IMMUNE'
+    ABSORB = 'ABSORB'
+    BLOCK = 'BLOCK'
+    DEFLECT = 'DEFLECT'
+    EVADE = 'EVADE'
+    REFLECT = 'REFLECT'
+    RESIST = 'RESIST'
 
 
 class AuraType(StrEnumParser):
@@ -142,6 +158,8 @@ class FailedType(StrEnumParser):
     INVALID_TARGET = 'Invalid target'
     ITEM_NOT_READY = 'Item is not ready yet'
     ACTION_IN_PROGRESS = 'Another action is in progress'
+    # and much much more
+    # better use str instead this enum
 
 
 class PowerType(IntEnumParser):
