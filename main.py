@@ -45,6 +45,7 @@ __all__ = [
 import os
 import sys
 import datetime
+import re
 import enum
 import logging
 
@@ -81,14 +82,44 @@ class ParsingError(Exception):
     """Exception type for internal use."""
 
 
+class ParsingLookupError(ParsingError, LookupError):
+    """ParsingError with LookupError base."""
+
+
 class StrEnumParser(str, enum.Enum):
     """StrEnum base class for parsing purpose.
-    Contains shared methods for str enum parsing."""
+    Contains shared methods for str enum parsing.
+    """
     @classmethod
-    def _missing_(cls, val: Union[str, Any]) -> str:
+    def _missing_(cls, value):
         """A classmethod for looking up values not found in cls."""
-        log.warning('StrEnumParser %r missing value %s.', cls, val)
-        return str(val)
+        log.warning('StrEnumParser %r missing value %r.', cls, value)
+        return cls._create_pseudo_member_(value)
+
+    @classmethod
+    def _create_pseudo_member_(cls, value):
+        """Create a new parsed member."""
+        value = str(value)
+        pseudo = cls._value2member_map_.get(value, None)
+        if pseudo is None:
+            # construct a singleton enum pseudo-member
+            pseudo = str.__new__(cls, value)
+            pseudo._name_ = cls.value_to_name(value)
+            pseudo._value_ = value
+            # use setdefault in case another thread already created value
+            pseudo = cls._value2member_map_.setdefault(value, pseudo)
+        return pseudo
+
+    @staticmethod
+    def value_to_name(value):
+        """Replace all invalid identifier chars in str(value) with '_'
+        and upper() transform to use it as Enum member name.
+        """
+        name = re.sub(r'\W+|^(?=\d)','_', str(value)).upper()
+        if not name.isidentifier():
+            raise ValueError('Value %r can not be transformed to '
+                             'a valid Enum member name.' % value)
+        return name
 
 
 class IntEnumParser(int, enum.Enum):
@@ -124,12 +155,12 @@ class IntFlagParser(enum.IntFlag):
 
 class EnvironmentalType(StrEnumParser):
     """Environmental Type parsing enum."""
-    DROWNING = 'Drowning'
-    FALLING = 'Falling'
-    FATIGUE = 'Fatigue'
-    FIRE = 'Fire'
-    LAVA = 'Lava'
-    SLIME = 'Slime'
+    DROWNING = 'DROWNING'
+    FALLING = 'FALLING'
+    FATIGUE = 'FATIGUE'
+    FIRE = 'FIRE'
+    LAVA = 'LAVA'
+    SLIME = 'SLIME'
 
 
 class MissType(StrEnumParser):
@@ -154,12 +185,16 @@ class AuraType(StrEnumParser):
 
 class FailedType(StrEnumParser):
     """Failed Type parsing enum."""
+    INTERRUPTED = 'Interrupted'
     NOT_RECOVERED = 'Not yet recovered'
+    NO_TARGET = 'No target'
     INVALID_TARGET = 'Invalid target'
     ITEM_NOT_READY = 'Item is not ready yet'
     ACTION_IN_PROGRESS = 'Another action is in progress'
+    OUT_OF_RANGE = 'Out of range'
     # and much much more
     # better use str instead this enum
+    # or be happy with _create_pseudo_member_ produced
 
 
 class PowerType(IntEnumParser):
@@ -401,6 +436,7 @@ class EventParamsParser():
     }
     MissParser: ClassVar[FieldsDict] = {
         'missType': MissType,
+        'amountMissed': int, # TODO: optional param
     }
     HealParser: ClassVar[FieldsDict] = {
         'amount': int,
@@ -527,7 +563,7 @@ class EventParamsParser():
                     prefix_fields, suffix_fields = psrs
                     break
         if prefix_fields is None or suffix_fields is None:
-            raise ParsingError(f'Parser absent for unknown event {event}.')
+            raise ParsingLookupError(f'Parser absent for unknown event {event}.')
         # Start popping params one by one in order saved in fields dicts
         for name, caster in chain(prefix_fields.items(), suffix_fields.items()):
             if name in self.parsed:
@@ -535,6 +571,8 @@ class EventParamsParser():
                     'Duplicate parse attempt for '
                     f'{event} event param {name}: {caster}.'
                 )
+            # TODO: Implement Optional caster logic
+            # e.g. 'if isinstance(caster, dict): #optional parser'
             # TODO: Replace hack '0' for int with caster default value
             self.parsed[name] = caster(self.pop_param('0'))
         # Check if some params left unparsed
@@ -559,11 +597,12 @@ class EventParamsParser():
         try:
             val = self.params.pop(0)
         except IndexError as exc:
-            log.exception(
-                'EventParamsParser.pop_param(%s) failed with %r.',
-                self,
-                exc,
-            )
+            #log.exception(
+            #    'EventParamsParser.pop_param(%s) failed with %r.',
+            #    self,
+            #    exc,
+            #)
+            pass
         return val
 
 
