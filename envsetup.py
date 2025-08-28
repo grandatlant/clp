@@ -10,20 +10,23 @@ __all__ = [
     'DotEnv',
 ]
 
+from dataclasses import dataclass
+
 from typing import (
     Final,
     Union,
 )
-import pydantic
+
 from dotenv import dotenv_values
 
 
-class DotEnv(pydantic.BaseModel):
+@dataclass
+class DotEnv:
     """Container for .env file values."""
     DEFAULT_COMBATLOG: str = 'combatlog.txt'
     LOG_LEVEL: Union[str, int] = 'WARNING'
 
-    
+
 ## TODO: Replace dotenv.dotenv_values -> ConfigParser
 env: Final[DotEnv] = DotEnv(**dotenv_values())
 
@@ -33,4 +36,4 @@ def main(args=None):
     return 0
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv))
+    main()
