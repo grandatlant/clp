@@ -21,6 +21,7 @@ __all__ = [
     'parse_combat_log_line',
     # Helper classes
     'ParsingError',
+    'ParsingLookupError',
     # str enums
     'StrEnumParser',
     'EnvironmentalType',
@@ -48,16 +49,15 @@ import datetime
 import re
 import enum
 import logging
+import itertools
 
-from itertools import chain
-from dataclasses import dataclass, field, InitVar, asdict
+from dataclasses import dataclass, field, asdict
 from argparse import ArgumentParser, Namespace
 
 from typing import (
     Final, ClassVar, Callable,
     Any, Optional, Union,
-    Tuple, List, Dict,
-    ItemsView, Container,
+    Tuple, List, Dict, Container,
 )
 
 import numpy as np
@@ -94,10 +94,10 @@ class StrEnumParser(str, enum.Enum):
     def _missing_(cls, value):
         """A classmethod for looking up values not found in cls."""
         log.warning('StrEnumParser %r missing value %r.', cls, value)
-        return cls._create_pseudo_member_(value)
+        return cls.pseudo_member(value)
 
     @classmethod
-    def _create_pseudo_member_(cls, value):
+    def pseudo_member(cls, value):
         """Create a new parsed member."""
         value = str(value)
         pseudo = cls._value2member_map_.get(value, None)
@@ -115,8 +115,8 @@ class StrEnumParser(str, enum.Enum):
         """Replace all invalid identifier chars in str(value) with '_'
         and upper() transform to use it as Enum member name.
         """
-        name = re.sub(r'\W+|^(?=\d)','_', str(value)).upper()
-        if not name.isidentifier():
+        name = re.sub(r'\W+|^(?=\d)', '_', str(value)).upper()
+        if not name.isidentifier(): # just double-check to be sure
             raise ValueError('Value %r can not be transformed to '
                              'a valid Enum member name.' % value)
         return name
@@ -132,7 +132,7 @@ class IntEnumParser(int, enum.Enum):
         # defaults '-1' as we think '0' is valid enum member for indexing
         literal: Union[str, bytes, bytearray] = '-1',
         base: int = 0,
-    ) -> object:
+    ):
         """Create enum member from int literal (usually hex)."""
         return cls(int(literal, base))
 
@@ -146,7 +146,7 @@ class IntFlagParser(enum.IntFlag):
         cls,
         literal: Union[str, bytes, bytearray] = '0',
         base: int = 0,
-    ) -> object:
+    ):
         """Create flag member from int literal (usually hex)."""
         return cls(int(literal, base))
 
@@ -194,7 +194,7 @@ class FailedType(StrEnumParser):
     OUT_OF_RANGE = 'Out of range'
     # and much much more
     # better use str instead this enum
-    # or be happy with _create_pseudo_member_ produced
+    # or be happy with _missing_ produced
 
 
 class PowerType(IntEnumParser):
@@ -295,20 +295,19 @@ class UnitGuid(str):
 
 @dataclass
 class UnitInfo():
-    """Describes Unit info in a single Combat Log record."""
-    guid_str: InitVar[str] = ''
-    guid: UnitGuid = field(init=False)
+    """Describes Unit info."""
+    guid: Union[UnitGuid, str] = ''
     name: str = ''
-    flags_str: InitVar[str] = '0'
-    flags: UnitFlag = field(init=False)
+    flags: Union[UnitFlag, int, str] = '0'
     
-    def __post_init__(
-        self,
-        guid_str: str,
-        flags_str: str,
-    ) -> None:
-        self.guid = UnitGuid(guid_str)
-        self.flags = UnitFlag.from_literal(flags_str)
+    def __post_init__(self):
+        if not isinstance(self.guid, UnitGuid):
+            self.guid = UnitGuid(str(self.guid))
+        if not isinstance(self.flags, UnitFlag):
+            if isinstance(self.flags, int):
+                self.flags = UnitFlag(self.flags)
+            else:
+                self.flags = UnitFlag.from_literal(str(self.flags))
         
     def dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -321,35 +320,38 @@ class CombatLogEvent():
     name: str
     
     #source: UnitInfo = field(default_factory=UnitInfo)
-    sourceID_str: InitVar[str] = ''
-    sourceID: UnitGuid = field(init=False)
+    sourceID: Union[UnitGuid, str] = field(default_factory=UnitGuid)
     sourceName: str = ''
-    sourceFlags_str: InitVar[str] = '0'
-    sourceFlags: UnitFlag = field(init=False)
+    sourceFlags: Union[UnitFlag, int, str] = '0'
     
     #dest: UnitInfo = field(default_factory=UnitInfo)
-    destID_str: InitVar[str] = ''
-    destID: UnitGuid = field(init=False)
+    destID: Union[UnitGuid, str] = field(default_factory=UnitGuid)
     destName: str = ''
-    destFlags_str: InitVar[str] = '0'
-    destFlags: UnitFlag = field(init=False)
+    destFlags: Union[UnitFlag, int, str] = '0'
     
     params: List[str] = field(default_factory=list)
 
-    def __post_init__(
-        self,
-        sourceID_str,
-        sourceFlags_str,
-        destID_str,
-        destFlags_str,
-    ) -> None:
-        self.sourceID = UnitGuid(sourceID_str)
-        self.sourceFlags = UnitFlag.from_literal(sourceFlags_str)
-        self.destID = UnitGuid(destID_str)
-        self.destFlags = UnitFlag.from_literal(destFlags_str)
+    def __post_init__(self):
+        # source type transform
+        if not isinstance(self.sourceID, UnitGuid):
+            self.sourceID = UnitGuid(str(self.sourceID))
+        if not isinstance(self.sourceFlags, UnitFlag):
+            if isinstance(self.sourceFlags, int):
+                self.sourceFlags = UnitFlag(self.sourceFlags)
+            else:
+                self.sourceFlags = UnitFlag.from_literal(str(self.sourceFlags))
+        # dest type transform
+        if not isinstance(self.destID, UnitGuid):
+            self.destID = UnitGuid(str(self.destID))
+        if not isinstance(self.destFlags, UnitFlag):
+            if isinstance(self.destFlags, int):
+                self.destFlags = UnitFlag(self.destFlags)
+            else:
+                self.destFlags = UnitFlag.from_literal(str(self.destFlags))
+
         
     @classmethod
-    def from_log_line(cls, line: str) -> object:
+    def from_log_line(cls, line: str):
         """Constructor for WoWCombatLog.txt parsing line by line."""
         # Example WoW 3.3.5 combat log line:
         # 4/21 20:19:34.123  SPELL_DAMAGE,Player-1-00000001,"Playername",0x511,Creature-0-0000-00000-00000-0000000000,"Training Dummy",0x10a48,12345,"Fireball",0x4,Training Dummy,0,0,1234,0,0,0,nil,nil,nil
@@ -364,27 +366,24 @@ class CombatLogEvent():
         timestamp = datetimeobj.timestamp()
         # Event descriprion part
         event_parts = eventstr.split(',')
-        event_name = event_parts[0].strip()
-        event_source = [
-            x.strip().strip('"')
-            for x in event_parts[1:4]
-        ]
-        event_dest = [
-            x.strip().strip('"')
-            for x in event_parts[4:7]
-        ]
-        event_params = [
-            x.strip().strip('"')
-            for x in event_parts[7:]
-        ]
+        name = event_parts[0].strip()
+        sourceID = event_parts[1].strip().strip('"')
+        sourceName = event_parts[2].strip().strip('"')
+        sourceFlags = event_parts[3].strip().strip('"')
+        destID = event_parts[4].strip().strip('"')
+        destName = event_parts[5].strip().strip('"')
+        destFlags = event_parts[6].strip().strip('"')
+        params = [p.strip().strip('"') for p in event_parts[7:]]
         return cls(
             timestamp,
-            event_name,
-            #UnitInfo(*event_source),
-            *event_source,
-            #UnitInfo(*event_dest),
-            *event_dest,
-            event_params,
+            name,
+            sourceID,
+            sourceName,
+            sourceFlags,
+            destID,
+            destName,
+            destFlags,
+            params,
         )
     
     def dict(self) -> Dict[str, Any]:
@@ -399,8 +398,10 @@ TwinParserDict = Dict[str, Tuple[FieldsDict, FieldsDict]]
 @dataclass
 class EventParamsParser():
     """Class for parsing CombatLogEvent for analyse."""
+    # Input data
     event: Union[CombatLogEvent, str]
     params: List[str] = field(default_factory=list)
+    # Output data
     parsed: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
@@ -436,7 +437,7 @@ class EventParamsParser():
     }
     MissParser: ClassVar[FieldsDict] = {
         'missType': MissType,
-        'amountMissed': int, # TODO: optional param
+        'amountMissed': int, # optional
     }
     HealParser: ClassVar[FieldsDict] = {
         'amount': int,
@@ -536,9 +537,9 @@ class EventParamsParser():
     }
     
     def parse(self) -> Dict[str, Any]:
-        """Parse event params to dict.
-        This call removes parsed "params" from "self" object one by one
-        and sets "self.parsed['params']" with list of params left unparsed.
+        """Parse event params to dict according to event name.
+        This call sets "self.parsed['params']"
+        with list of params left unparsed.
         Return value: self.parsed.
         """
         if isinstance(self.event, CombatLogEvent):
@@ -546,7 +547,8 @@ class EventParamsParser():
             self.parsed.update(self.event.dict())
         else:
             event = str(self.event)
-        # Search for longest prefix
+
+        # Search for prefix-suffix pair with longest prefix
         prefix_fields, suffix_fields = None, None
         prefix_match = []
         for k in self.prefix_parsers.keys():
@@ -563,47 +565,30 @@ class EventParamsParser():
                     prefix_fields, suffix_fields = psrs
                     break
         if prefix_fields is None or suffix_fields is None:
-            raise ParsingLookupError(f'Parser absent for unknown event {event}.')
-        # Start popping params one by one in order saved in fields dicts
-        for name, caster in chain(prefix_fields.items(), suffix_fields.items()):
+            raise ParsingLookupError(f'No parser for event {event}.')
+
+        # Start parsing params
+        parsed_count = 0
+        parsers = itertools.chain(prefix_fields.items(), suffix_fields.items())
+        for (name, caster), param in zip(parsers, self.params):
             if name in self.parsed:
-                raise ParsingError(
-                    'Duplicate parse attempt for '
-                    f'{event} event param {name}: {caster}.'
-                )
-            # TODO: Implement Optional caster logic
-            # e.g. 'if isinstance(caster, dict): #optional parser'
-            # TODO: Replace hack '0' for int with caster default value
-            self.parsed[name] = caster(self.pop_param('0'))
+                err = f'Duplicate: {event} param "{name}" already parsed.'
+                raise ParsingError(err)
+            self.parsed[name] = caster(param)
+            parsed_count += 1
+
         # Check if some params left unparsed
-        if self.params:
-            self.parsed['params'] = self.params
+        params_left = self.params[parsed_count:]
+        if params_left:
+            self.parsed['params'] = params_left
             log.warning(
                 'EventParamsParser.parse(%s) left params %s unparsed.',
                 self,
-                self.params,
+                params_left,
             )
-        else:
-            # All params parsed, remove it if exists
+        else: # all params parsed in full, remove it from result
             self.parsed.pop('params', None)
         return self.parsed
-
-    def pop_param(self, default: str = '') -> str:
-        """Remove and return first param (with index 0) from "self.params".
-        "default" returned if no items left (IndexError catched).
-        Return value: self.params.pop(0) or default
-        """
-        val = default
-        try:
-            val = self.params.pop(0)
-        except IndexError as exc:
-            #log.exception(
-            #    'EventParamsParser.pop_param(%s) failed with %r.',
-            #    self,
-            #    exc,
-            #)
-            pass
-        return val
 
 
 # Helper functions
@@ -612,7 +597,7 @@ def parse_combat_log_line(
     line: str,
 ) -> Dict[str, Any]:
     """Parse combatlog file line to dict."""
-    parsed = None
+    parsed = {}
     try:
         parsed = EventParamsParser(CombatLogEvent.from_log_line(line)).parse()
     except ParsingError as exc:
