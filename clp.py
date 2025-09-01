@@ -411,7 +411,6 @@ class EventParamsParser():
     EnvParser: ClassVar[FieldsDict] = {
         'environmentalType': EnvironmentalType,
     }
-    
     # Suffix parsers
     DamageParser: ClassVar[FieldsDict] = {
         'amount': int,
@@ -462,14 +461,12 @@ class EventParamsParser():
     CastFailedParser: ClassVar[FieldsDict] = {
         'failedType': FailedType,
     }
-    
     # Special parsers
     EnchantParser: ClassVar[FieldsDict] = {
         'spellName': str,
         'itemID': int,
         'itemName': str,
     }
-    
     # Combo-parsers
     prefix_parsers: ClassVar[ParserDict] = {
         #'EVENT_PREFIX': FieldsDict, # {} - no params for this prefix
@@ -549,8 +546,8 @@ class EventParamsParser():
             self.parsed.update(self.event.dict())
         else:
             event = str(self.event)
+            self.parsed.setdefault('name', event)
         params = self.params if params is None else params
-
         # Search for prefix-suffix pair with longest prefix
         prefix_fields, suffix_fields = None, None
         prefix_match = []
@@ -568,8 +565,8 @@ class EventParamsParser():
                     prefix_fields, suffix_fields = psrs
                     break
         if prefix_fields is None or suffix_fields is None:
-            raise ParsingLookupError(f'No parser for event {event}.')
-
+            err = f'No parser for event {event}.'
+            raise ParsingLookupError(err)
         # Start parsing params
         parsed_count = 0
         parsers = itertools.chain(prefix_fields.items(), suffix_fields.items())
@@ -579,15 +576,17 @@ class EventParamsParser():
                 raise ParsingError(err)
             self.parsed[name] = caster(param)
             parsed_count += 1
-
         # Check if some params left unparsed
         params_left = params[parsed_count:]
         if params_left:
             self.parsed['params'] = params_left
             log.warning(
-                'EventParamsParser.parse(%s) left params %s unparsed.',
+                'EventParamsParser.parse(%s) '
+                'left params %s unparsed '
+                'for event %s.',
                 self,
                 params_left,
+                event,
             )
         else: # all params parsed in full, remove it from result
             self.parsed.pop('params', None)

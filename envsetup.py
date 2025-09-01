@@ -23,7 +23,7 @@ from dotenv import dotenv_values
 @dataclass
 class DotEnv:
     """Container for .env file values."""
-    DEFAULT_COMBATLOG: str = 'combatlog.txt'
+    DEFAULT_COMBATLOG: str = 'WoWCombatLog.txt'
     LOG_LEVEL: Union[str, int] = 'WARNING'
 
 

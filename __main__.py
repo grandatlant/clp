@@ -23,11 +23,14 @@ from typing import (
 import numpy as np
 import pandas as pd
 
-from envsetup import env
 from clp import (__version__, parse_combat_log)
+from envsetup import env
+
+DEFAULT_COMBATLOG = env.DEFAULT_COMBATLOG
+LOG_LEVEL = env.LOG_LEVEL
 
 log: Final[logging.Logger] = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG if __debug__ else env.LOG_LEVEL)
+log.setLevel(logging.DEBUG if __debug__ else LOG_LEVEL)
 
 
 def parse_cli_args(
@@ -48,9 +51,9 @@ def parse_cli_args(
     parser.add_argument(
         'combatlog',
         nargs = '?',
-        default = env.DEFAULT_COMBATLOG,
+        default = DEFAULT_COMBATLOG,
         help = f'''name of combatlog file to parse.
-        Default "{env.DEFAULT_COMBATLOG}" is script-defined.''',
+        Default "{DEFAULT_COMBATLOG}" is script-defined.''',
     )
     return parser.parse_args(args, namespace) # type: ignore
 
@@ -58,7 +61,7 @@ def parse_cli_args(
 ##  MAIN ENTRY POINT
 def main(args: Optional[List[str]] = None) -> int:
     logging.basicConfig(
-        level = logging.DEBUG if __debug__ else env.LOG_LEVEL,
+        level = logging.DEBUG if __debug__ else LOG_LEVEL,
         stream = sys.stdout,
         format = '%(levelname)s:%(name)s:%(message)s',
     )
