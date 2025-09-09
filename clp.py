@@ -44,6 +44,7 @@ import enum
 import logging
 import datetime
 import itertools
+import shlex
 
 from dataclasses import dataclass, field, asdict
 
@@ -359,14 +360,30 @@ class CombatLogEvent():
         ) + datetime.timedelta(milliseconds=int(milliseconds))
         timestamp = datetimeobj.timestamp()
         # Event descriprion part
-        event_parts = eventstr.split(',')
+        #event_parts = eventstr.split(',')
+        splitter = shlex.shlex(eventstr, posix=True)
+        splitter.whitespace = ','
+        splitter.whitespace_split = True
+        event_parts = list(splitter)
+        # Event name first
         name = event_parts[0].strip()
+        if len(event_parts) < 7: # no source-dest info.
+            obj = cls(timestamp, name)
+            log.warning(
+                'CombatLogEvent.from_log_line(%r): '
+                'Unknown line format. Defaults returned: %r.',
+                line,
+                obj,
+            )
+            return obj
+        # Base event params (source-dest info)
         sourceID = event_parts[1].strip().strip('"')
         sourceName = event_parts[2].strip().strip('"')
         sourceFlags = event_parts[3].strip().strip('"')
         destID = event_parts[4].strip().strip('"')
         destName = event_parts[5].strip().strip('"')
         destFlags = event_parts[6].strip().strip('"')
+        # Event-specific params
         params = [p.strip().strip('"') for p in event_parts[7:]]
         return cls(
             timestamp,
