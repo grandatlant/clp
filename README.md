@@ -1,2 +1,2 @@
-# combatlogparse utility for World of Warcraft
+# CombatLog parse utils for World of Warcraft 3.3.5a.
 
