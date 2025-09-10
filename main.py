@@ -9,14 +9,12 @@ https://wowpedia.fandom.com/wiki/COMBAT_LOG_EVENT
 __copyright__ = 'Copyright (C) 2025 grandatlant'
 
 
+import logging
 import os
 import sys
-import logging
-
 from argparse import ArgumentParser, Namespace
-
 from typing import (
-    Final, Optional, Union, 
+    Final, Optional, Union,
     List, Container,
 )
 

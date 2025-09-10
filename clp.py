@@ -39,15 +39,13 @@ __all__ = [
     'EventParamsParser',
 ]
 
-import re
-import enum
-import logging
 import datetime
+import enum
 import itertools
+import logging
+import re
 import shlex
-
 from dataclasses import dataclass, field, asdict
-
 from typing import (
     Final, ClassVar,
     Callable,
