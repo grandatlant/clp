@@ -9,7 +9,7 @@ https://wowpedia.fandom.com/wiki/COMBAT_LOG_EVENT
 
 __copyright__ = 'Copyright (C) 2025 grandatlant'
 
-__version__ = '0.0.5'
+__version__ = '0.1.0'
 
 __all__ = [
     # Helper functions
