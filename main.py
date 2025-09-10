@@ -14,14 +14,17 @@ import os
 import sys
 from argparse import ArgumentParser, Namespace
 from typing import (
-    Final, Optional, Union,
-    List, Container,
+    Final,
+    Optional,
+    Union,
+    List,
+    Container,
 )
 
 import numpy as np
 import pandas as pd
 
-from clp import (__version__, parse_combat_log)
+from clp import __version__, parse_combat_log
 from envsetup import env
 
 DEFAULT_COMBATLOG = env.DEFAULT_COMBATLOG
@@ -37,31 +40,32 @@ def parse_cli_args(
 ) -> Namespace:
     """Parse provided cli arguments."""
     parser: ArgumentParser = ArgumentParser(
-        description = __doc__,
-        epilog = __copyright__,
-        #allow_abbrev = False,
+        description=__doc__,
+        epilog=__copyright__,
+        # allow_abbrev = False,
     )
     parser.add_argument(
-        '-v', '--version',
-        action = 'version',
-        version = f'%(prog)s {__version__}',
+        '-v',
+        '--version',
+        action='version',
+        version=f'%(prog)s {__version__}',
     )
     parser.add_argument(
         'combatlog',
-        nargs = '?',
-        default = DEFAULT_COMBATLOG,
-        help = f'''name of combatlog file to parse.
+        nargs='?',
+        default=DEFAULT_COMBATLOG,
+        help=f'''name of combatlog file to parse.
         Default "{DEFAULT_COMBATLOG}" is script-defined.''',
     )
-    return parser.parse_args(args, namespace) # type: ignore
+    return parser.parse_args(args, namespace)  # type: ignore
 
 
 ##  MAIN ENTRY POINT
 def main(args: Optional[List[str]] = None) -> int:
     logging.basicConfig(
-        level = logging.DEBUG if __debug__ else LOG_LEVEL,
-        stream = sys.stdout,
-        format = '%(levelname)s:%(name)s:%(message)s',
+        level=logging.DEBUG if __debug__ else LOG_LEVEL,
+        stream=sys.stdout,
+        format='%(levelname)s:%(name)s:%(message)s',
     )
     log.debug('%s.main(%s) start.', __name__, args)
     if args and args == sys.argv:
@@ -73,13 +77,13 @@ def main(args: Optional[List[str]] = None) -> int:
         if os.path.exists(parsed.combatlog):
             if os.path.isfile(parsed.combatlog):
                 df = pd.DataFrame(parse_combat_log(parsed.combatlog))
-                #print(df)
+                # print(df)
                 df.to_json(
                     '%s.json' % parsed.combatlog,
                     orient='records',
                     indent=4,
                 )
-    '''
+    """
     if df is not None:
         for group in df.groupby('event'):
             #print(group)
@@ -88,16 +92,17 @@ def main(args: Optional[List[str]] = None) -> int:
                 orient='records',
                 indent=4,
             )
-    '''
+    """
     log.debug('%s.main(%s) finish. return 0', __name__, args)
     return 0
 
 
 if __name__ == '__main__':
-    #assert sys.prefix != sys.base_prefix, 'Running outside venv!'
+    # assert sys.prefix != sys.base_prefix, 'Running outside venv!'
     if flag := getattr(sys, 'ps1', sys.flags.interactive):
         print('(interactive: %s)' % flag)
         from pprint import pprint as pp
+
         cldf = pd.DataFrame(parse_combat_log('WoWCombatLog.txt'))
         pp(dir(), compact=True, indent=4)
     else:

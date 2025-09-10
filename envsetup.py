@@ -1,7 +1,7 @@
 #!/usr/bin/env -S python3 -O
 # -*- coding = utf-8 -*-
 """Environment setup module.
-Exports 'DotEnv' pydantic model class and 'env' Final container, 
+Exports 'DotEnv' data class and 'env' Final container,
 initialized from .env file found.
 """
 
@@ -23,6 +23,7 @@ from dotenv import dotenv_values
 @dataclass
 class DotEnv:
     """Container for .env file values."""
+
     DEFAULT_COMBATLOG: str = 'WoWCombatLog.txt'
     LOG_LEVEL: Union[str, int] = 'WARNING'
 
@@ -34,6 +35,7 @@ env: Final[DotEnv] = DotEnv(**dotenv_values())
 ##  MAIN ENTRY POINT
 def main(args=None):
     return 0
+
 
 if __name__ == '__main__':
     main()
