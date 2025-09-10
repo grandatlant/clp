@@ -21,7 +21,6 @@ from typing import (
     Container,
 )
 
-import numpy as np
 import pandas as pd
 
 from clp import __version__, parse_combat_log
