@@ -9,6 +9,11 @@ dependencies = [
     "python-dotenv==1.1.1",
 ]
 
+[project.optional-dependencies]
+ipynb = [
+    "notebook>=7.4.5",
+]
+
 [tool.ruff]
 line-length = 79
 
