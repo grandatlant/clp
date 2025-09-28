@@ -9,7 +9,7 @@ https://wowpedia.fandom.com/wiki/COMBAT_LOG_EVENT
 
 __copyright__ = 'Copyright (C) 2025 grandatlant'
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 __all__ = [
     # Helper functions
@@ -34,7 +34,7 @@ __all__ = [
     'UnitFlag',
     # data containers
     'UnitGuid',
-    'UnitInfo',
+    'Unit',
     # Parsing classes
     'CombatLogEvent',
     'EventParamsParser',
@@ -342,7 +342,7 @@ class UnitGuid(str):
             val = int(self)
         except ValueError as exc:
             log.exception(
-                'UnitGuid.try_int(%r) failed with %r. int(0) returned.',
+                'UnitGuid.to_int(%r) failed with %r. int(0) returned.',
                 self,
                 exc,
             )
@@ -350,12 +350,12 @@ class UnitGuid(str):
 
 
 @dataclass
-class UnitInfo:
+class Unit:
     """Describes Unit info."""
 
-    guid: Union[UnitGuid, str] = ''
-    name: str = ''
-    flags: Union[UnitFlag, int, str] = '0'
+    guid: UnitGuid
+    name: str
+    flags: UnitFlag = UnitFlag.NONE
 
     def __post_init__(self):
         if not isinstance(self.guid, UnitGuid):
@@ -378,42 +378,17 @@ class UnitInfo:
         return int(self.flags)
 
 
-@dataclass
+@dataclass(order=True)
 class CombatLogEvent:
     """Describes single Combat Log record."""
 
     timestamp: float
     name: str
 
-    # source: UnitInfo = field(default_factory=UnitInfo)
-    sourceID: Union[UnitGuid, str] = field(default_factory=UnitGuid)
-    sourceName: str = ''
-    sourceFlags: Union[UnitFlag, int, str] = '0'
-
-    # dest: UnitInfo = field(default_factory=UnitInfo)
-    destID: Union[UnitGuid, str] = field(default_factory=UnitGuid)
-    destName: str = ''
-    destFlags: Union[UnitFlag, int, str] = '0'
+    source: Optional[Unit] = None
+    dest: Optional[Unit] = None
 
     params: List[str] = field(default_factory=list)
-
-    def __post_init__(self):
-        # source type transform
-        if not isinstance(self.sourceID, UnitGuid):
-            self.sourceID = UnitGuid(str(self.sourceID))
-        if not isinstance(self.sourceFlags, UnitFlag):
-            if isinstance(self.sourceFlags, int):
-                self.sourceFlags = UnitFlag(self.sourceFlags)
-            else:
-                self.sourceFlags = UnitFlag.from_literal(str(self.sourceFlags))
-        # dest type transform
-        if not isinstance(self.destID, UnitGuid):
-            self.destID = UnitGuid(str(self.destID))
-        if not isinstance(self.destFlags, UnitFlag):
-            if isinstance(self.destFlags, int):
-                self.destFlags = UnitFlag(self.destFlags)
-            else:
-                self.destFlags = UnitFlag.from_literal(str(self.destFlags))
 
     @classmethod
     def from_log_line(cls, line: str):
@@ -456,15 +431,20 @@ class CombatLogEvent:
         destFlags = event_parts[6].strip().strip('"')
         # Event-specific params
         params = [p.strip().strip('"') for p in event_parts[7:]]
+        # Create complete CombatLogEvent
         return cls(
             timestamp,
             name,
-            sourceID,
-            sourceName,
-            sourceFlags,
-            destID,
-            destName,
-            destFlags,
+            Unit(
+                sourceID,
+                sourceName,
+                sourceFlags,
+            ),
+            Unit(
+                destID,
+                destName,
+                destFlags,
+            ),
             params,
         )
 
@@ -629,6 +609,7 @@ class EventParamsParser:
 
     @classmethod
     def get_all_fields(cls) -> FieldsDict:
+        # TODO: Replace result with collections.ChainMap
         result = {}
         for fieldsdict in itertools.chain(
             cls.prefix_parsers.values(),

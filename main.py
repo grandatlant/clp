@@ -1,5 +1,11 @@
-#!/usr/bin/env -S python3
-# -*- coding = utf-8 -*-
+#!/usr/bin/env -S python3 -O
+# -*- coding: utf-8 -*-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pandas",
+# ]
+# ///
 r"""combatlogparse main module.
 
 Reference:
