@@ -4,6 +4,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #   "pandas",
+#   "python-dotenv",
 # ]
 # ///
 r"""combatlogparse main module.
@@ -82,7 +83,7 @@ def main(args: Optional[List[str]] = None) -> int:
         if os.path.exists(parsed.combatlog):
             if os.path.isfile(parsed.combatlog):
                 df = pd.DataFrame(parse_combat_log(parsed.combatlog))
-                # print(df)
+                print(df)
                 df.to_json(
                     '%s.json' % parsed.combatlog,
                     orient='records',
@@ -90,14 +91,14 @@ def main(args: Optional[List[str]] = None) -> int:
                 )
     """
     if df is not None:
-        for group in df.groupby('event'):
+        for group in df.groupby('name'):
             #print(group)
             group[1].to_json(
                 '(%s).%s.json' % (group[0], parsed.combatlog),
                 orient='records',
                 indent=4,
             )
-    """
+    #"""
     log.debug('%s.main(%s) finish. return 0', __name__, args)
     return 0
 
