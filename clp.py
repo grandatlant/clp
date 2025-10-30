@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -O
-# -*- coding = utf-8 -*-
+# -*- coding: utf-8 -*-
 """clp.py
 Combat Log Parsing Module.
 
@@ -9,7 +9,7 @@ https://wowpedia.fandom.com/wiki/COMBAT_LOG_EVENT
 
 __copyright__ = 'Copyright (C) 2025 grandatlant'
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 __all__ = [
     # Helper functions
@@ -34,7 +34,7 @@ __all__ = [
     'UnitFlag',
     # data containers
     'UnitGuid',
-    'UnitInfo',
+    'Unit',
     # Parsing classes
     'CombatLogEvent',
     'EventParamsParser',
@@ -109,7 +109,9 @@ class StrEnumParser(str, enum.Enum):
     @classmethod
     def pseudo_member(cls, value):
         """Create a new parsed member."""
-        value = str(value)
+        # Save old value ID in case its str already
+        if not isinstance(value, str):
+            value = str(value)
         pseudo = cls._value2member_map_.get(value, None)
         if pseudo is None:
             # construct a singleton enum pseudo-member
@@ -337,25 +339,26 @@ class UnitGuid(str):
 
     def to_int(self) -> int:
         """Return value: int(self) or int(0)."""
-        val = int(0)
         try:
             val = int(self)
         except ValueError as exc:
             log.exception(
-                'UnitGuid.try_int(%r) failed with %r. int(0) returned.',
+                'UnitGuid.to_int(%r) failed with %r. int(0) returned.',
                 self,
                 exc,
             )
-        return val
+            return int(0)
+        else:
+            return val
 
 
 @dataclass
-class UnitInfo:
+class Unit:
     """Describes Unit info."""
 
-    guid: Union[UnitGuid, str] = ''
-    name: str = ''
-    flags: Union[UnitFlag, int, str] = '0'
+    guid: UnitGuid
+    name: str
+    flags: UnitFlag = UnitFlag.NONE
 
     def __post_init__(self):
         if not isinstance(self.guid, UnitGuid):
@@ -371,49 +374,26 @@ class UnitInfo:
 
     def __str__(self):
         """Return value: self.name."""
-        return self.name if isinstance(self.name, str) else str(self.name)
+        if isinstance(self.name, str):
+            return self.name
+        return str(self.name)
 
     def __int__(self):
         """Return value: int(self.flags)."""
         return int(self.flags)
 
 
-@dataclass
+@dataclass(order=True)
 class CombatLogEvent:
     """Describes single Combat Log record."""
 
     timestamp: float
     name: str
 
-    # source: UnitInfo = field(default_factory=UnitInfo)
-    sourceID: Union[UnitGuid, str] = field(default_factory=UnitGuid)
-    sourceName: str = ''
-    sourceFlags: Union[UnitFlag, int, str] = '0'
-
-    # dest: UnitInfo = field(default_factory=UnitInfo)
-    destID: Union[UnitGuid, str] = field(default_factory=UnitGuid)
-    destName: str = ''
-    destFlags: Union[UnitFlag, int, str] = '0'
+    source: Optional[Unit] = None
+    dest: Optional[Unit] = None
 
     params: List[str] = field(default_factory=list)
-
-    def __post_init__(self):
-        # source type transform
-        if not isinstance(self.sourceID, UnitGuid):
-            self.sourceID = UnitGuid(str(self.sourceID))
-        if not isinstance(self.sourceFlags, UnitFlag):
-            if isinstance(self.sourceFlags, int):
-                self.sourceFlags = UnitFlag(self.sourceFlags)
-            else:
-                self.sourceFlags = UnitFlag.from_literal(str(self.sourceFlags))
-        # dest type transform
-        if not isinstance(self.destID, UnitGuid):
-            self.destID = UnitGuid(str(self.destID))
-        if not isinstance(self.destFlags, UnitFlag):
-            if isinstance(self.destFlags, int):
-                self.destFlags = UnitFlag(self.destFlags)
-            else:
-                self.destFlags = UnitFlag.from_literal(str(self.destFlags))
 
     @classmethod
     def from_log_line(cls, line: str):
@@ -456,15 +436,20 @@ class CombatLogEvent:
         destFlags = event_parts[6].strip().strip('"')
         # Event-specific params
         params = [p.strip().strip('"') for p in event_parts[7:]]
+        # Create complete CombatLogEvent
         return cls(
             timestamp,
             name,
-            sourceID,
-            sourceName,
-            sourceFlags,
-            destID,
-            destName,
-            destFlags,
+            Unit(
+                sourceID,
+                sourceName,
+                sourceFlags,
+            ),
+            Unit(
+                destID,
+                destName,
+                destFlags,
+            ),
             params,
         )
 
@@ -473,15 +458,15 @@ class CombatLogEvent:
 
     def __str__(self):
         """Return value: self.name."""
-        return self.name if isinstance(self.name, str) else str(self.name)
+        if isinstance(self.name, str):
+            return self.name
+        return str(self.name)
 
     def __float__(self):
         """Return value: self.timestamp."""
-        return (
-            self.timestamp
-            if isinstance(self.timestamp, float)
-            else float(self.timestamp)
-        )
+        if isinstance(self.timestamp, float):
+            return self.timestamp
+        return float(self.timestamp)
 
     def __int__(self):
         """Return value: int(self.timestamp)."""
@@ -629,6 +614,7 @@ class EventParamsParser:
 
     @classmethod
     def get_all_fields(cls) -> FieldsDict:
+        # TODO: Replace result with collections.ChainMap
         result = {}
         for fieldsdict in itertools.chain(
             cls.prefix_parsers.values(),
@@ -652,7 +638,8 @@ class EventParamsParser:
         else:
             event = str(self.event)
             self.parsed.setdefault('name', event)
-        params = self.params if params is None else params
+        if params is None:
+            params = self.params
         # Search for prefix-suffix pair with longest prefix
         prefix_fields, suffix_fields = None, None
         prefix_match = []
@@ -706,7 +693,6 @@ def parse_combat_log_line(
     line: str,
 ) -> Dict[str, Any]:
     """Parse combatlog file line to dict."""
-    parsed = dict()
     try:
         parsed = EventParamsParser(CombatLogEvent.from_log_line(line)).parse()
     except ParsingError as exc:
@@ -715,7 +701,9 @@ def parse_combat_log_line(
             line,
             exc,
         )
-    return parsed
+        return dict()
+    else:
+        return parsed
 
 
 def parse_combat_log_generator(
