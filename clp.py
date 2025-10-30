@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -O
-# -*- coding = utf-8 -*-
+# -*- coding: utf-8 -*-
 """clp.py
 Combat Log Parsing Module.
 
@@ -109,7 +109,9 @@ class StrEnumParser(str, enum.Enum):
     @classmethod
     def pseudo_member(cls, value):
         """Create a new parsed member."""
-        value = str(value)
+        # Save old value ID in case its str already
+        if not isinstance(value, str):
+            value = str(value)
         pseudo = cls._value2member_map_.get(value, None)
         if pseudo is None:
             # construct a singleton enum pseudo-member
@@ -337,7 +339,6 @@ class UnitGuid(str):
 
     def to_int(self) -> int:
         """Return value: int(self) or int(0)."""
-        val = int(0)
         try:
             val = int(self)
         except ValueError as exc:
@@ -346,7 +347,9 @@ class UnitGuid(str):
                 self,
                 exc,
             )
-        return val
+            return int(0)
+        else:
+            return val
 
 
 @dataclass
@@ -371,7 +374,9 @@ class Unit:
 
     def __str__(self):
         """Return value: self.name."""
-        return self.name if isinstance(self.name, str) else str(self.name)
+        if isinstance(self.name, str):
+            return self.name
+        return str(self.name)
 
     def __int__(self):
         """Return value: int(self.flags)."""
@@ -453,15 +458,15 @@ class CombatLogEvent:
 
     def __str__(self):
         """Return value: self.name."""
-        return self.name if isinstance(self.name, str) else str(self.name)
+        if isinstance(self.name, str):
+            return self.name
+        return str(self.name)
 
     def __float__(self):
         """Return value: self.timestamp."""
-        return (
-            self.timestamp
-            if isinstance(self.timestamp, float)
-            else float(self.timestamp)
-        )
+        if isinstance(self.timestamp, float):
+            return self.timestamp
+        return float(self.timestamp)
 
     def __int__(self):
         """Return value: int(self.timestamp)."""
@@ -633,7 +638,8 @@ class EventParamsParser:
         else:
             event = str(self.event)
             self.parsed.setdefault('name', event)
-        params = self.params if params is None else params
+        if params is None:
+            params = self.params
         # Search for prefix-suffix pair with longest prefix
         prefix_fields, suffix_fields = None, None
         prefix_match = []
@@ -687,7 +693,6 @@ def parse_combat_log_line(
     line: str,
 ) -> Dict[str, Any]:
     """Parse combatlog file line to dict."""
-    parsed = dict()
     try:
         parsed = EventParamsParser(CombatLogEvent.from_log_line(line)).parse()
     except ParsingError as exc:
@@ -696,7 +701,9 @@ def parse_combat_log_line(
             line,
             exc,
         )
-    return parsed
+        return dict()
+    else:
+        return parsed
 
 
 def parse_combat_log_generator(
