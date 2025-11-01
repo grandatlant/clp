@@ -7,6 +7,8 @@ Reference:
 https://wowpedia.fandom.com/wiki/COMBAT_LOG_EVENT
 """
 
+from __future__ import annotations
+
 __copyright__ = 'Copyright (C) 2025 grandatlant'
 
 __version__ = '0.1.1'
@@ -14,7 +16,7 @@ __version__ = '0.1.1'
 __all__ = [
     # Helper functions
     'parse_combat_log',
-    'parse_combat_log_generator',
+    'parsed_combat_log',
     'parse_combat_log_line',
     # Helper classes
     'ParsingError',
@@ -94,7 +96,7 @@ class StrEnumParser(str, enum.Enum):
     """
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: str) -> StrEnumParser:
         """A classmethod for looking up values not found in cls."""
         member = cls.pseudo_member(value)
         log.warning(
@@ -107,7 +109,7 @@ class StrEnumParser(str, enum.Enum):
         return member
 
     @classmethod
-    def pseudo_member(cls, value):
+    def pseudo_member(cls, value: str) -> StrEnumParser:
         """Create a new parsed member."""
         # Save old value ID in case its str already
         if not isinstance(value, str):
@@ -123,7 +125,7 @@ class StrEnumParser(str, enum.Enum):
         return pseudo
 
     @staticmethod
-    def value_to_name(value):
+    def value_to_name(value: str) -> str:
         """Replace all invalid identifier chars in str(value) with '_'
         and upper() transform to use it as Enum member name.
         """
@@ -147,7 +149,7 @@ class IntEnumParser(int, enum.Enum):
         # defaults '-1' as we think '0' is valid enum member for indexing
         literal: Union[str, bytes, bytearray] = '-1',
         base: int = 0,
-    ):
+    ) -> IntEnumParser:
         """Create enum member from int literal (usually hex)."""
         return cls(int(literal, base))
 
@@ -162,7 +164,7 @@ class IntFlagParser(enum.IntFlag):
         cls,
         literal: Union[str, bytes, bytearray] = '0',
         base: int = 0,
-    ):
+    ) -> IntFlagParser:
         """Create flag member from int literal (usually hex)."""
         return cls(int(literal, base))
 
@@ -333,7 +335,7 @@ class UnitGuid(str):
     to try to form int value (defaults to 0).
     """
 
-    def __int__(self):
+    def __int__(self) -> int:
         """Return value: int(self, base=0)."""
         return int(str(self).strip(), base=0)
 
@@ -360,7 +362,7 @@ class Unit:
     name: str
     flags: UnitFlag = UnitFlag.NONE
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not isinstance(self.guid, UnitGuid):
             self.guid = UnitGuid(str(self.guid))
         if not isinstance(self.flags, UnitFlag):
@@ -372,13 +374,13 @@ class Unit:
     def dict(self) -> Dict[str, Any]:
         return asdict(self)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return value: self.name."""
         if isinstance(self.name, str):
             return self.name
         return str(self.name)
 
-    def __int__(self):
+    def __int__(self) -> int:
         """Return value: int(self.flags)."""
         return int(self.flags)
 
@@ -396,7 +398,7 @@ class CombatLogEvent:
     params: List[str] = field(default_factory=list)
 
     @classmethod
-    def from_log_line(cls, line: str):
+    def from_log_line(cls, line: str) -> CombatLogEvent:
         """Constructor for WoWCombatLog.txt parsing line by line."""
         # Example WoW 3.3.5 combat log line:
         # 4/21 20:19:34.123  SPELL_DAMAGE,Player-1-00000001,"Playername",0x511,Creature-0-0000-00000-00000-0000000000,"Training Dummy",0x10a48,12345,"Fireball",0x4,Training Dummy,0,0,1234,0,0,0,nil,nil,nil
@@ -456,19 +458,19 @@ class CombatLogEvent:
     def dict(self) -> Dict[str, Any]:
         return asdict(self)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return value: self.name."""
         if isinstance(self.name, str):
             return self.name
         return str(self.name)
 
-    def __float__(self):
+    def __float__(self) -> float:
         """Return value: self.timestamp."""
         if isinstance(self.timestamp, float):
             return self.timestamp
         return float(self.timestamp)
 
-    def __int__(self):
+    def __int__(self) -> int:
         """Return value: int(self.timestamp)."""
         return int(self.timestamp)
 
@@ -483,7 +485,7 @@ class EventParamsParser:
     # Output data
     parsed: Dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if isinstance(self.event, CombatLogEvent):
             self.params = self.event.params.copy()
 
@@ -706,7 +708,7 @@ def parse_combat_log_line(
         return parsed
 
 
-def parse_combat_log_generator(
+def parsed_combat_log(
     combatlog: str,
 ) -> Generator[Dict[str, Any], None, None]:
     """Generator for parsed combatlog events."""
@@ -721,10 +723,10 @@ def parse_combat_log(
     combatlog: str,
 ) -> List[Dict[str, Any]]:
     """Parse combatlog file to list of dicts."""
-    return list(parse_combat_log_generator(combatlog))
+    return list(parsed_combat_log(combatlog))
 
 
-def main(args=None):
+def main(args: Optional[List[str]] = None) -> int:
     return 0
 
 

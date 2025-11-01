@@ -32,14 +32,14 @@ class DotEnv:
 
     default: ClassVar[Optional[Any]] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # per-instance data update lock, in case of emergency
         self._lock = RLock()
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         return vars(self).get(name.upper(), self.default)
 
-    def __contains__(self, key):
+    def __contains__(self, key: str) -> bool:
         return key in vars(self)
 
     def setdefault(self, name: str = 'default', value: Any = None) -> Any:

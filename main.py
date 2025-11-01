@@ -78,7 +78,7 @@ def main(args: Optional[List[str]] = None) -> int:
         args = args[1:]
     parsed: Namespace = parse_cli_args(args)
     log.debug('Parsed cli args: %s', parsed)
-    df = None
+    df: Optional[pd.DataFrame] = None
     if parsed and parsed.combatlog:
         if os.path.exists(parsed.combatlog):
             if os.path.isfile(parsed.combatlog):
@@ -109,7 +109,7 @@ if __name__ == '__main__':
         print('(interactive: %s)' % flag)
         from pprint import pprint as pp
 
-        cldf = pd.DataFrame(parse_combat_log('WoWCombatLog.txt'))
+        cldf: pd.DataFrame = pd.DataFrame(parse_combat_log('WoWCombatLog.txt'))
         pp(dir(), compact=True, indent=4)
     else:
         sys.exit(main(sys.argv))
